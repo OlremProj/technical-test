@@ -20,10 +20,12 @@ export class ListenerService {
     );
   }
 
-  listen() {
+  async listen() {
     const fork = this.em.fork();
-    return this.provider.on('block', async (blockNumber: number) =>
-      this.onNewBlock(blockNumber, fork, this.client),
+    return this.provider.on(
+      'block',
+      async (blockNumber: number) =>
+        await this.onNewBlock(blockNumber, fork, this.client),
     );
   }
 
@@ -33,22 +35,22 @@ export class ListenerService {
     client: ClientProxy,
   ) {
     const storedBlock = await em.findOne(Block, { number: blockNumber });
+
     if (storedBlock) return;
+
     const blockOnChain = await this.provider.getBlock(blockNumber);
-
     const transactionHashes = blockOnChain.transactions;
-
     const block = new Block(blockOnChain);
-    await em.persistAndFlush(block);
-    const data = {
-      blockHash: block.hash,
-      blockNumber: block.number,
-      transactionHashes,
-    };
-    console.log('===================data');
-    console.log(data);
-    console.log('===================data');
 
-    return client.send('transactions', data);
+    await em.persistAndFlush(block);
+
+    return client.emit(
+      { cmd: 'transactions' },
+      {
+        blockHash: block.hash,
+        blockNumber: block.number,
+        transactionHashes,
+      },
+    );
   }
 }

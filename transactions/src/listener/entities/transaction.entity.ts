@@ -48,7 +48,7 @@ export class Transaction {
   @Property({ type: 'text' })
   value: number;
 
-  @Property({ type: 'bigint' })
+  @Property({ type: 'bigint', nullable: true })
   chainId: number;
 
   @Property({ type: 'text', nullable: true })

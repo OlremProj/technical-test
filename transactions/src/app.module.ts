@@ -28,10 +28,4 @@ import { ListenerModule } from './listener/listener.module';
   ],
   providers: [],
 })
-export class AppModule implements OnModuleInit {
-  constructor(private readonly orm: MikroORM) {}
-
-  async onModuleInit(): Promise<void> {
-    await this.orm.getMigrator().up();
-  }
-}
+export class AppModule {}

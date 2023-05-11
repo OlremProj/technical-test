@@ -1,9 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
+import { TransactionsDTO } from './dto/transactions.dto';
 import { Transaction } from './entities/transaction.entity';
-import { ClientProxy, MessagePattern, Payload } from '@nestjs/microservices';
 
 @Injectable()
 export class ListenerService {
@@ -19,17 +19,21 @@ export class ListenerService {
     );
   }
 
-  async listen() {
-    // for (const transactionHash of transactionHashes) {
-    //   const transactionOnChain = await this.provider.getTransaction(
-    //     transactionHash,
-    //   );
-    //   const transaction = new Transaction({
-    //     ...transactionOnChain,
-    //     blockHash: block.hash,
-    //     blockNumber: block.number,
-    //   });
-    //   await em.persistAndFlush(transaction);
-    // }
+  async transactions({
+    blockHash,
+    blockNumber,
+    transactionHashes,
+  }: TransactionsDTO) {
+    for (const transactionHash of transactionHashes) {
+      const transactionOnChain = await this.provider.getTransaction(
+        transactionHash,
+      );
+      const transaction = new Transaction({
+        ...transactionOnChain,
+        blockHash,
+        blockNumber,
+      });
+      await this.em.fork().persistAndFlush(transaction);
+    }
   }
 }
