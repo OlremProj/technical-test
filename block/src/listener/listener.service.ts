@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
 import { Block } from './entities/block.entity';
-import { Transaction } from './entities/transaction.entity';
+import { ClientProxy } from '@nestjs/microservices';
 
 @Injectable()
 export class ListenerService {
@@ -12,6 +12,7 @@ export class ListenerService {
   constructor(
     private readonly configService: ConfigService,
     private readonly em: EntityManager,
+    @Inject('TRANSACTIONS_COMPUTATION') private client: ClientProxy,
   ) {
     this.provider = new ethers.WebSocketProvider(
       this.configService.get('ALCHEMY_BASE_WS') +
@@ -21,12 +22,16 @@ export class ListenerService {
 
   listen() {
     const fork = this.em.fork();
-    this.provider.on('block', async (blockNumber: number) =>
-      this.onNewBlock(blockNumber, fork),
+    return this.provider.on('block', async (blockNumber: number) =>
+      this.onNewBlock(blockNumber, fork, this.client),
     );
   }
 
-  async onNewBlock(blockNumber: number, em: EntityManager) {
+  async onNewBlock(
+    blockNumber: number,
+    em: EntityManager,
+    client: ClientProxy,
+  ) {
     const storedBlock = await em.findOne(Block, { number: blockNumber });
     if (storedBlock) return;
     const blockOnChain = await this.provider.getBlock(blockNumber);
@@ -35,15 +40,15 @@ export class ListenerService {
 
     const block = new Block(blockOnChain);
     await em.persistAndFlush(block);
+    const data = {
+      blockHash: block.hash,
+      blockNumber: block.number,
+      transactionHashes,
+    };
+    console.log('===================data');
+    console.log(data);
+    console.log('===================data');
 
-    for (const transactionHash of transactionHashes) {
-      const transactionOnChain = await this.provider.getTransaction(
-        transactionHash,
-      );
-
-      const transaction = new Transaction(transactionOnChain);
-      await em.persistAndFlush(transaction);
-    }
-    return;
+    return client.send('transactions', data);
   }
 }
