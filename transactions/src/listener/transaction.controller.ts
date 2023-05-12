@@ -1,14 +1,14 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern } from '@nestjs/microservices';
-import { ListenerService } from './listener.service';
+import { TransactionService } from './transaction.service';
 import { TransactionsDTO } from './dto/transactions.dto';
 
 @Controller()
-export class ListenerController {
-  constructor(private readonly listenerService: ListenerService) {}
+export class TransactionController {
+  constructor(private readonly transcationService: TransactionService) {}
 
   @MessagePattern({ cmd: 'transactions' })
   async transcations(data: TransactionsDTO): Promise<void> {
-    this.listenerService.transactions(data);
+    this.transcationService.transactions(data);
   }
 }

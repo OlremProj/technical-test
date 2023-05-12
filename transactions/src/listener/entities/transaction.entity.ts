@@ -1,5 +1,4 @@
 import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
-import { Signature } from './signature.entity';
 
 @Entity()
 export class Transaction {
@@ -13,7 +12,7 @@ export class Transaction {
   blockHash: string;
 
   @Property({ type: 'bigint', nullable: true })
-  index: number | undefined;
+  transactionIndex: number | undefined;
 
   @Property({ type: 'char', length: 66 })
   hash: string;
@@ -57,7 +56,7 @@ export class Transaction {
   constructor({
     blockNumber,
     blockHash,
-    index,
+    transactionIndex,
     hash,
     type,
     to,
@@ -74,7 +73,7 @@ export class Transaction {
   }) {
     this.blockNumber = blockNumber;
     this.blockHash = blockHash;
-    this.index = index;
+    this.transactionIndex = transactionIndex;
     this.hash = hash;
     this.type = type;
     this.to = to;

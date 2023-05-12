@@ -38,6 +38,9 @@ export class Block {
   @Property({ type: 'bigint' })
   baseFeePerGas: number;
 
+  @Property({ type: 'char', length: 6, nullable: true })
+  flag: string;
+
   constructor({
     number,
     hash,

@@ -1,8 +1,7 @@
-import { Module, OnModuleInit } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
-import { MikroORM } from '@mikro-orm/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ListenerModule } from './listener/listener.module';
+import { TransactionModule } from './listener/transaction.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -14,6 +13,7 @@ import { ListenerModule } from './listener/listener.module';
         return {
           host: 'localhost',
           port: 5432,
+          allowGlobalContext: true,
           entities: ['dist/**/*.entity.js'],
           entitiesTs: ['src/**/*.entity.ts'],
           dbName: configService.get('POSTGRES_DB'),
@@ -24,7 +24,7 @@ import { ListenerModule } from './listener/listener.module';
       },
       inject: [ConfigService],
     }),
-    ListenerModule,
+    TransactionModule,
   ],
   providers: [],
 })

@@ -14,6 +14,7 @@ import { ListenerModule } from './listener/listener.module';
         return {
           host: 'localhost',
           port: 5432,
+          allowGlobalContext: true,
           entities: ['dist/**/*.entity.js'],
           entitiesTs: ['src/**/*.entity.ts'],
           dbName: configService.get('POSTGRES_DB'),
