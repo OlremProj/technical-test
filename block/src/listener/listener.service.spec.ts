@@ -1,123 +1,176 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { ListenerService } from './listener.service';
 import { ConfigService } from '@nestjs/config';
-import { AlchemyWebSocketProvider } from '@ethersproject/providers';
-import { ethers } from 'ethers';
-import { EntityManager } from '@mikro-orm/core';
+import { Test } from '@nestjs/testing';
+import { ListenerService } from './listener.service';
 import { ClientProxy } from '@nestjs/microservices';
-import { EntityRepository } from '@mikro-orm/nestjs';
-import { Block } from './entities/block.entity';
+import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
+import { Block } from './block.entity';
+import { BlockRepository } from './block.repository';
+import { WebSocketProvider, ethers } from 'ethers';
 
+const blockOnChain = {
+  number: 123,
+  hash: 'hash',
+  parentHash: 'parent',
+  transactions: ['tx1', 'tx2'],
+  baseFeePerGas: '123',
+};
+class MockProvider {
+  async getBlock(blockNumber) {
+    // return a mock block object
+    return blockOnChain;
+  }
+}
 describe('ListenerService', () => {
-  let listenerService: ListenerService;
+  let service: ListenerService;
+  let configService: ConfigService;
   let em: EntityManager;
-  let blockRepository: EntityRepository<Block>;
+  let blockRepository: BlockRepository;
   let client: ClientProxy;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    const module = await Test.createTestingModule({
       providers: [
         ListenerService,
         {
-          provide: ConfigService,
-          useValue: {
-            get: jest.fn(),
-          },
-        },
-        {
-          provide: AlchemyWebSocketProvider,
-          useValue: {
-            _subscribe: jest.fn(),
-            getBlock: jest.fn(),
-          },
-        },
-        {
           provide: EntityManager,
-          useValue: {
-            findOne: jest.fn(),
-            persistAndFlush: jest.fn(),
-          },
+          useValue: { persistAndFlush: jest.fn() },
         },
         {
-          provide: EntityRepository,
+          provide: BlockRepository,
           useValue: {
             findOne: jest.fn(),
             upsert: jest.fn(),
           },
         },
         {
-          provide: ClientProxy,
+          provide: EntityRepository,
           useValue: {
-            emit: jest.fn(),
+            findOne: jest.fn(),
+            persistAndFlush: jest.fn(),
+          },
+        },
+        {
+          provide: ClientProxy,
+          useValue: {},
+        },
+        {
+          provide: 'TRANSACTIONS_COMPUTATION',
+          useValue: {},
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockReturnValue('wss://alchemy_key'),
           },
         },
       ],
     }).compile();
 
-    listenerService = module.get<ListenerService>(ListenerService);
+    service = module.get<ListenerService>(ListenerService);
     em = module.get<EntityManager>(EntityManager);
-    blockRepository = module.get<EntityRepository<Block>>(EntityRepository);
+    blockRepository = module.get<BlockRepository>(BlockRepository);
     client = module.get<ClientProxy>(ClientProxy);
+    configService = module.get(ConfigService);
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
   });
 
-  describe('flagForkBlock', () => {
-    it('should flag forked blocks', async () => {
-      const parentHash = '0xabc';
+  describe('onNewBLock', () => {
+    it('should save the block in the database and emit transaction hashes to the worker', async () => {
       const blockNumber = 123;
 
-      jest.spyOn(blockRepository, 'findOne').mockResolvedValueOnce({
-        number: blockNumber,
-      } as Block);
+      jest.spyOn(configService, 'get').mockReturnValueOnce('url');
 
-      jest.spyOn(blockRepository, 'upsert').mockImplementation();
+      const mockProvider = new MockProvider();
+      service.provider = mockProvider as any;
 
-      jest.spyOn(blockRepository, 'findOne').mockResolvedValueOnce({
-        hash: '0xdef',
-      } as Block);
+      em.findOne = jest.fn().mockResolvedValueOnce(null);
+      em.persistAndFlush = jest.fn().mockResolvedValueOnce(null);
+      client.emit = jest.fn();
 
-      const result = await listenerService.flagForkBlock({
-        parentHash,
-        blockNumber,
-      });
+      await service.onNewBlock(blockNumber, em, client);
 
-      expect(blockRepository.findOne).toHaveBeenCalledTimes(2);
-      expect(blockRepository.upsert).toHaveBeenCalledTimes(1);
-      expect(result).toBeUndefined();
+      expect(em.persistAndFlush).toHaveBeenCalledWith(
+        new Block({
+          ...blockOnChain,
+          baseFeePerGas: 123,
+        } as unknown as Block),
+      );
+
+      expect(client.emit).toHaveBeenCalledWith(
+        { cmd: 'transactions' },
+        {
+          blockHash: blockOnChain.hash,
+          blockNumber: blockOnChain.number,
+          transactionHashes: blockOnChain.transactions,
+        },
+      );
     });
-  });
-
-  describe('onNewBlock', () => {
-    it('should save new block and emit transaction hashes', async () => {
-      const number = '0xabc';
-      const parentHash = '0xdef';
-      const hash = '0xghi';
+    it('should flag fock block in the database and emit transaction hashes to the worker', async () => {
       const blockNumber = 123;
 
-      const blockOnChain = {
-        transactions: ['0x123', '0x456'],
-        baseFeePerGas: '1',
-      };
+      jest.spyOn(configService, 'get').mockReturnValueOnce('url');
 
-      const block = new Block({
+      const mockProvider = new MockProvider();
+      service.provider = mockProvider as any;
+      blockRepository.findOne = jest.fn().mockResolvedValue({
         ...blockOnChain,
-        number: blockNumber,
-        hash,
-        parentHash,
-        baseFeePerGas: Number(blockOnChain.baseFeePerGas),
+        hash: 'parent',
+        parentHash: 'parentHash',
+      });
+      em.findOne = jest.fn().mockResolvedValueOnce({
+        ...blockOnChain,
+        hash: 'oldHash',
+        parentHash: 'parentHash',
+      });
+      em.persistAndFlush = jest.fn().mockResolvedValueOnce(null);
+      client.emit = jest.fn();
+
+      await service.onNewBlock(blockNumber, em, client);
+
+      expect(blockRepository.upsert).toHaveBeenCalledWith({
+        ...blockOnChain,
+        hash: 'parent',
+        parentHash: 'parentHash',
+        flag: 'FORKED',
       });
 
-      jest.spyOn(listenerService, 'flagForkBlock').mockImplementation();
+      expect(em.persistAndFlush).toHaveBeenCalledWith(
+        new Block({
+          ...blockOnChain,
+          baseFeePerGas: 123,
+        } as unknown as Block),
+      );
 
-      jest
-        .spyOn(em, 'findOne')
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValueOnce({ hash: '0xjkl' } as Block);
+      expect(client.emit).toHaveBeenCalledWith(
+        { cmd: 'transactions' },
+        {
+          blockHash: blockOnChain.hash,
+          blockNumber: blockOnChain.number,
+          transactionHashes: blockOnChain.transactions,
+        },
+      );
+    });
 
-      jest.spyOn(em, 'persistAndFlush').mockImplementation;
+    it('should escape work if block already exist', async () => {
+      const blockNumber = 123;
+
+      jest.spyOn(configService, 'get').mockReturnValueOnce('url');
+
+      const mockProvider = new MockProvider();
+      service.provider = mockProvider as any;
+
+      em.findOne = jest.fn().mockResolvedValueOnce(blockOnChain);
+      em.persistAndFlush = jest.fn().mockResolvedValueOnce(null);
+      client.emit = jest.fn();
+
+      await service.onNewBlock(blockNumber, em, client);
+
+      expect(em.persistAndFlush).not.toHaveBeenCalled();
+
+      expect(client.emit).not.toHaveBeenCalled();
     });
   });
 });

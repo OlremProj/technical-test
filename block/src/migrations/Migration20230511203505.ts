@@ -7,7 +7,7 @@ export class Migration20230511203505 extends Migration {
     );
 
     this.addSql(
-      'create table "transaction" ("id" serial primary key, "block_number" bigint null, "block_hash" char(66) not null, "transaction_index" bigint null, "hash" char(66) not null, "type" bigint not null, "to" char(66) null, "from" char(66) not null, "nonce" bigint not null, "gas_limit" bigint not null, "gas_price" bigint not null, "max_priority_fee_per_gas" bigint null, "max_fee_per_gas" bigint null, "data" text not null, "value" text not null, "chain_id" bigint not null, "access_list" text null);',
+      'create table "transaction" ("id" serial primary key, "block_number" bigint null, "block_hash" char(66) not null, "transaction_index" bigint null, "hash" char(66) not null, "type" bigint not null, "to" char(66) null, "from" char(66) not null, "nonce" bigint not null, "gas_limit" bigint null, "gas_price" bigint null, "max_priority_fee_per_gas" bigint null, "max_fee_per_gas" bigint null, "data" text not null, "value" text null, "chain_id" bigint  null, "access_list" text null);',
     );
   }
 

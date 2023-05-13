@@ -1,14 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { EntityManager, EntityRepository } from '@mikro-orm/core';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { ConfigService } from '@nestjs/config';
 import { WebSocketProvider, ethers } from 'ethers';
-import { Block } from './entities/block.entity';
+import { Block } from './block.entity';
 import { ClientProxy } from '@nestjs/microservices';
-import { InjectRepository } from '@mikro-orm/nestjs';
+import { BlockRepository } from './block.repository';
 
 @Injectable()
 export class ListenerService {
-  private readonly provider: WebSocketProvider;
+  provider: WebSocketProvider;
   /**
    * ListenerService constructor.
    *
@@ -20,8 +20,7 @@ export class ListenerService {
   constructor(
     private readonly configService: ConfigService,
     private readonly em: EntityManager,
-    @InjectRepository(Block)
-    private readonly blockRepository: EntityRepository<Block>,
+    private readonly blockRepository: BlockRepository,
     @Inject('TRANSACTIONS_COMPUTATION') private client: ClientProxy,
   ) {
     this.provider = new ethers.WebSocketProvider(
@@ -116,7 +115,7 @@ export class ListenerService {
 
     // Send transactions hashes to dedicated worker
     if (blockOnChain.transactions)
-      client.emit(
+      return client.emit(
         { cmd: 'transactions' },
         {
           blockHash: block.hash,
