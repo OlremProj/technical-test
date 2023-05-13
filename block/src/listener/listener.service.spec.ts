@@ -5,7 +5,6 @@ import { ClientProxy } from '@nestjs/microservices';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
 import { Block } from './block.entity';
 import { BlockRepository } from './block.repository';
-import { WebSocketProvider, ethers } from 'ethers';
 
 const blockOnChain = {
   number: 123,

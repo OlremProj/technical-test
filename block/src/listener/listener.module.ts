@@ -4,18 +4,25 @@ import { ListenerService } from './listener.service';
 import { Block } from 'src/listener/block.entity';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { BlockRepository } from './block.repository';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
     MikroOrmModule.forFeature({ entities: [Block] }),
-    ClientsModule.register([
+    ClientsModule.registerAsync([
       {
         name: 'TRANSACTIONS_COMPUTATION',
-        transport: Transport.REDIS,
-        options: {
-          host: 'localhost',
-          port: 6379,
+        useFactory: async (configService: ConfigService) => {
+          return {
+            name: 'TRANSACTIONS_COMPUTATION',
+            transport: Transport.REDIS,
+            options: {
+              host: configService.get('REDIS_ENDPOINT'),
+              port: Number(configService.get('REDIS_PORT')),
+            },
+          };
         },
+        inject: [ConfigService],
       },
     ]),
   ],

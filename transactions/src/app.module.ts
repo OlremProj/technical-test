@@ -11,8 +11,8 @@ import { TransactionModule } from './listener/transaction.module';
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
         return {
-          host: 'localhost',
-          port: 5432,
+          host: configService.get('POSTGRES_ENDPOINT'),
+          port: Number(configService.get('POSTGRES_PORT')),
           allowGlobalContext: true,
           entities: ['dist/**/*.entity.js'],
           entitiesTs: ['src/**/*.entity.ts'],

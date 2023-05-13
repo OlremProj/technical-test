@@ -1,6 +1,30 @@
 version: "3.8"
 
 services:
+  listner-block:
+    build:
+      context: ./block
+      dockerfile: dev.Dockerfile
+    volumes:
+      - "./block:/home/app/"
+      - /home/app/node_modules
+    depends_on:
+      - db
+    stdin_open: true # docker run -i
+    tty: true # docker run -t
+
+  listner-transactions:
+    build:
+      context: ./transactions
+      dockerfile: dev.Dockerfile
+    volumes:
+      - "./transactions:/home/app/"
+      - /home/app/node_modules
+    depends_on:
+      - db
+    stdin_open: true # docker run -i
+    tty: true # docker run -t
+
   db:
     image: postgres
     restart: always
