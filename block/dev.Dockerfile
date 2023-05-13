@@ -12,7 +12,7 @@ COPY  --chown=node package*.json ./
 # COPY tsconfig.json file
 COPY  --chown=node tsconfig.json ./
 
-RUN npm ci
+RUN npm i
 
 USER node
 
