@@ -1,16 +1,22 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { EntityManager, EntityRepository } from '@mikro-orm/core';
 import { ConfigService } from '@nestjs/config';
-import { ethers } from 'ethers';
+import { WebSocketProvider, ethers } from 'ethers';
 import { Block } from './entities/block.entity';
 import { ClientProxy } from '@nestjs/microservices';
-import { AlchemyWebSocketProvider } from '@ethersproject/providers';
 import { InjectRepository } from '@mikro-orm/nestjs';
 
 @Injectable()
 export class ListenerService {
-  private readonly provider: AlchemyWebSocketProvider;
-
+  private readonly provider: WebSocketProvider;
+  /**
+   * ListenerService constructor.
+   *
+   * @param configService - Configuration service.
+   * @param em - Entity manager.
+   * @param blockRepository - Block repository.
+   * @param client - Microservice client.
+   */
   constructor(
     private readonly configService: ConfigService,
     private readonly em: EntityManager,
@@ -18,17 +24,17 @@ export class ListenerService {
     private readonly blockRepository: EntityRepository<Block>,
     @Inject('TRANSACTIONS_COMPUTATION') private client: ClientProxy,
   ) {
-    this.provider = new ethers.providers.AlchemyWebSocketProvider(
-      Number(this.configService.get<number>('CHAIN_ID')),
-      this.configService.get<string>('ALCHEMY_API_KEY'),
+    this.provider = new ethers.WebSocketProvider(
+      this.configService.get<string>('ALCHEMY_BASE_WS') +
+        this.configService.get<string>('ALCHEMY_API_KEY'),
     );
   }
 
   /**
-   * listenOrphan function catch block logs to check removed flag and know if the block Is focked or not
+   * Flags a forked block and its previous blocks in the database.
    *
-   *
-   * @param number
+   * @param parentHash - the parent hash of the forked block.
+   * @param blockNumber - the block number of the forked block.
    */
   async flagForkBlock({
     parentHash,
@@ -57,38 +63,47 @@ export class ListenerService {
   }
 
   /**
-   * listen function run new block number listning throw 'newHeads' event
-   *
-   * @returns Promise<void>
+   * Listens for new blocks and processes them when received.
    */
   async listen() {
-    this.provider._subscribe('block', ['newHeads'], async (blockHeader) => {
-      await this.onNewBlock(blockHeader, this.em, this.client);
-    });
+    try {
+      this.provider.on('block', async (blockNumber) => {
+        await this.onNewBlock(blockNumber, this.em, this.client);
+      });
+    } catch (error) {
+      console.error(`Failed to listen for new blocks: ${error.message}`);
+      // wait for a few seconds before retrying
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await this.listen(); // relaunch listening
+    }
   }
 
   /**
-   * onNewBlock function get block data if the block aren't already catch save data in database
-   * and send transactions hashes to dedicated nestjs microservices througth redis to traitement
+   * Processes a new block by saving it in the database and emitting its transaction hashes to a worker.
    *
-   * @param blockNumber :number
-   * @param em :EntityManager
-   * @param client:ClientProxy
-   * @returns Promise<void>
+   * @param number - the block number of the new block.
+   * @param parentHash - the parent hash of the new block.
+   * @param hash - the hash of the new block.
+   * @param em - the entity manager to use for database operations.
+   * @param client - the client proxy to use for emitting transaction hashes.
    */
-  async onNewBlock(blockHeader: any, em: EntityManager, client: ClientProxy) {
-    const blockNumber = parseInt(blockHeader.number, 16);
+  async onNewBlock(
+    blockNumber: number,
+    em: EntityManager,
+    client: ClientProxy,
+  ) {
     const storedBlock = await em.findOne(Block, {
       number: blockNumber,
     });
 
-    //Escape work if block already saved
-    if (storedBlock && storedBlock.hash == blockHeader.hash) {
-      return;
-    }
-
     //Get block data
     const blockOnChain = await this.provider.getBlock(blockNumber);
+
+    //Escape work if block already saved
+    if (storedBlock) {
+      if (storedBlock.hash == blockOnChain.hash) return;
+      this.flagForkBlock({ parentHash: blockOnChain.parentHash, blockNumber });
+    }
 
     //New block creation and mapping
     const block = new Block({
