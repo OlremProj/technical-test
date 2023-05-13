@@ -5,7 +5,7 @@ export class Transaction {
   @PrimaryKey()
   id!: number;
 
-  @Property({ type: 'bigint' })
+  @Property({ type: 'bigint', nullable: true })
   blockNumber: number;
 
   @Property({ type: 'char', length: 66 })
@@ -29,10 +29,10 @@ export class Transaction {
   @Property({ type: 'bigint' })
   nonce: number;
 
-  @Property({ type: 'bigint' })
+  @Property({ type: 'bigint', nullable: true })
   gasLimit: bigint;
 
-  @Property({ type: 'bigint' })
+  @Property({ type: 'bigint', nullable: true })
   gasPrice: bigint;
 
   @Property({ type: 'bigint', nullable: true })
@@ -44,7 +44,7 @@ export class Transaction {
   @Property({ type: 'text' })
   data: string;
 
-  @Property({ type: 'text' })
+  @Property({ type: 'text', nullable: true })
   value: number;
 
   @Property({ type: 'bigint', nullable: true })
