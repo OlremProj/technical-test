@@ -1,19 +1,18 @@
 import { Entity, PrimaryKey, Property } from '@mikro-orm/core';
-import { Signature } from './signature.entity';
 
 @Entity()
 export class Transaction {
   @PrimaryKey()
   id!: number;
 
-  @Property({ type: 'bigint' })
+  @Property({ type: 'bigint', nullable: true })
   blockNumber: number;
 
   @Property({ type: 'char', length: 66 })
   blockHash: string;
 
   @Property({ type: 'bigint', nullable: true })
-  index: number | undefined;
+  transactionIndex: number | undefined;
 
   @Property({ type: 'char', length: 66 })
   hash: string;
@@ -21,7 +20,7 @@ export class Transaction {
   @Property({ type: 'bigint' })
   type: number;
 
-  @Property({ type: 'char', length: 66 })
+  @Property({ type: 'char', length: 66, nullable: true })
   to: string;
 
   @Property({ type: 'char', length: 66 })
@@ -30,34 +29,34 @@ export class Transaction {
   @Property({ type: 'bigint' })
   nonce: number;
 
-  @Property({ type: 'bigint' })
+  @Property({ type: 'bigint', nullable: true })
   gasLimit: bigint;
 
-  @Property({ type: 'bigint' })
+  @Property({ type: 'bigint', nullable: true })
   gasPrice: bigint;
 
-  @Property({ type: 'bigint' })
+  @Property({ type: 'bigint', nullable: true })
   maxPriorityFeePerGas: number;
 
-  @Property({ type: 'bigint' })
+  @Property({ type: 'bigint', nullable: true })
   maxFeePerGas: number;
 
-  @Property({ type: 'longtext' })
+  @Property({ type: 'text' })
   data: string;
 
-  @Property({ type: 'bigint' })
+  @Property({ type: 'text', nullable: true })
   value: number;
 
-  @Property({ type: 'bigint' })
+  @Property({ type: 'bigint', nullable: true })
   chainId: number;
 
-  @Property({ type: 'array', nullable: true })
-  accessList: any[];
+  @Property({ type: 'text', nullable: true })
+  accessList: string;
 
   constructor({
     blockNumber,
     blockHash,
-    index,
+    transactionIndex,
     hash,
     type,
     to,
@@ -74,7 +73,7 @@ export class Transaction {
   }) {
     this.blockNumber = blockNumber;
     this.blockHash = blockHash;
-    this.index = index;
+    this.transactionIndex = transactionIndex;
     this.hash = hash;
     this.type = type;
     this.to = to;
@@ -87,6 +86,6 @@ export class Transaction {
     this.data = data;
     this.value = value;
     this.chainId = chainId;
-    this.accessList = accessList;
+    this.accessList = accessList ? accessList.toString() : null;
   }
 }

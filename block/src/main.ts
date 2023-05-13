@@ -5,6 +5,7 @@ import { ListenerModule } from './listener/listener.module';
 
 async function bootstrap() {
   const app = await NestFactory.createApplicationContext(AppModule);
+
   const listenerService = app
     .select(ListenerModule)
     .get(ListenerService, { strict: true });
