@@ -2,9 +2,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { ConfigService } from '@nestjs/config';
 import { WebSocketProvider, ethers } from 'ethers';
-import { Block } from './block.entity';
+import { Block } from './entities/block.entity';
 import { ClientProxy } from '@nestjs/microservices';
-import { BlockRepository } from './block.repository';
+import { LockedBlock } from './entities/lockedBlock.entity';
 
 @Injectable()
 export class ListenerService {
@@ -20,13 +20,13 @@ export class ListenerService {
   constructor(
     private readonly configService: ConfigService,
     private readonly em: EntityManager,
-    private readonly blockRepository: BlockRepository,
     @Inject('TRANSACTIONS_COMPUTATION') private client: ClientProxy,
   ) {
     this.provider = new ethers.WebSocketProvider(
       this.configService.get<string>('ALCHEMY_BASE_WS') +
         this.configService.get<string>('ALCHEMY_API_KEY'),
     );
+    this.dbSynchronisation();
   }
 
   /**
@@ -42,12 +42,12 @@ export class ListenerService {
     parentHash: string;
     blockNumber: number;
   }) {
-    const block = await this.blockRepository.findOne({ number: blockNumber });
-    await this.blockRepository.upsert({ ...block, flag: 'FORKED' });
+    const block = await this.em.findOne(Block, { number: blockNumber });
+    await this.em.upsert(Block, { ...block, flag: 'FORKED' });
 
     if (
       (
-        await this.blockRepository.findOne({
+        await this.em.findOne(Block, {
           number: blockNumber - 1,
         })
       ).hash !== parentHash
@@ -67,13 +67,11 @@ export class ListenerService {
   async listen() {
     try {
       this.provider.on('block', async (blockNumber) => {
+        console.log('Realtime listen : ', blockNumber);
         await this.onNewBlock(blockNumber, this.em, this.client);
       });
     } catch (error) {
       console.error(`Failed to listen for new blocks: ${error.message}`);
-      // wait for a few seconds before retrying
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      await this.listen(); // relaunch listening
     }
   }
 
@@ -86,17 +84,30 @@ export class ListenerService {
    * @param em - the entity manager to use for database operations.
    * @param client - the client proxy to use for emitting transaction hashes.
    */
-  async onNewBlock(
-    blockNumber: number,
-    em: EntityManager,
-    client: ClientProxy,
-  ) {
+  async onNewBlock(blockNumber: number, em = this.em, client = this.client) {
+    //Get block data
+    const blockOnChain = await this.provider.getBlock(blockNumber);
+
+    //Check if data isn't already processed by another instance
+    if (
+      !!(await em.findOne(LockedBlock, {
+        hash: blockOnChain.hash,
+      }))
+    )
+      return;
+
+    //Lock block in process
+    try {
+      const lock = new LockedBlock({ hash: blockOnChain.hash });
+      await em.persistAndFlush(lock);
+    } catch {
+      console.log('Lock undetected but block already on process');
+      return;
+    }
+
     const storedBlock = await em.findOne(Block, {
       number: blockNumber,
     });
-
-    //Get block data
-    const blockOnChain = await this.provider.getBlock(blockNumber);
 
     //Escape work if block already saved
     if (storedBlock) {
@@ -123,5 +134,47 @@ export class ListenerService {
           transactionHashes: blockOnChain.transactions,
         },
       );
+
+    return;
+  }
+
+  async dbSynchronisation() {
+    console.log('DB Synchonisation to get missing block after service restart');
+    const latestStoredBlock: Block[] = await this.em.find(
+      Block,
+      {},
+      {
+        orderBy: { number: -1 },
+        limit: 1,
+      },
+    );
+
+    //If it's the first launch of the application we don't launch sync on the blockchain from the blocknumber 0
+    if (!latestStoredBlock || latestStoredBlock.length === 0) {
+      console.log('First start nothing to recover');
+      return;
+    }
+
+    let { number: latestDbBlockNumber } = latestStoredBlock[0];
+
+    const latestBcBlockNumber: number = (await this.provider.getBlock('latest'))
+      .number;
+
+    if (latestDbBlockNumber === latestBcBlockNumber) {
+      console.log('Already synchronised');
+      return;
+    }
+    console.log(
+      `Recovering of ${
+        latestBcBlockNumber - latestDbBlockNumber
+      } missing block`,
+    );
+
+    while (latestDbBlockNumber < latestBcBlockNumber) {
+      console.log('Recovery of : ', latestDbBlockNumber++);
+      await this.onNewBlock(latestDbBlockNumber);
+    }
+    console.log('Db synchronised : ', latestBcBlockNumber);
+    return;
   }
 }

@@ -3,8 +3,7 @@ import { Test } from '@nestjs/testing';
 import { ListenerService } from './listener.service';
 import { ClientProxy } from '@nestjs/microservices';
 import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
-import { Block } from './block.entity';
-import { BlockRepository } from './block.repository';
+import { Block } from './entities/block.entity';
 
 const blockOnChain = {
   number: 123,
@@ -23,7 +22,6 @@ describe('ListenerService', () => {
   let service: ListenerService;
   let configService: ConfigService;
   let em: EntityManager;
-  let blockRepository: BlockRepository;
   let client: ClientProxy;
 
   beforeEach(async () => {
@@ -35,17 +33,11 @@ describe('ListenerService', () => {
           useValue: { persistAndFlush: jest.fn() },
         },
         {
-          provide: BlockRepository,
-          useValue: {
-            findOne: jest.fn(),
-            upsert: jest.fn(),
-          },
-        },
-        {
           provide: EntityRepository,
           useValue: {
             findOne: jest.fn(),
             persistAndFlush: jest.fn(),
+            upsert: jest.fn(),
           },
         },
         {
@@ -67,7 +59,6 @@ describe('ListenerService', () => {
 
     service = module.get<ListenerService>(ListenerService);
     em = module.get<EntityManager>(EntityManager);
-    blockRepository = module.get<BlockRepository>(BlockRepository);
     client = module.get<ClientProxy>(ClientProxy);
     configService = module.get(ConfigService);
   });
@@ -114,22 +105,26 @@ describe('ListenerService', () => {
 
       const mockProvider = new MockProvider();
       service.provider = mockProvider as any;
-      blockRepository.findOne = jest.fn().mockResolvedValue({
-        ...blockOnChain,
-        hash: 'parent',
-        parentHash: 'parentHash',
-      });
+      em.findOne = jest
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({
+          ...blockOnChain,
+          hash: 'parent',
+          parentHash: 'parentHash',
+        });
       em.findOne = jest.fn().mockResolvedValueOnce({
         ...blockOnChain,
         hash: 'oldHash',
         parentHash: 'parentHash',
       });
       em.persistAndFlush = jest.fn().mockResolvedValueOnce(null);
+      em.upsert = jest.fn();
       client.emit = jest.fn();
 
       await service.onNewBlock(blockNumber, em, client);
 
-      expect(blockRepository.upsert).toHaveBeenCalledWith({
+      expect(em.upsert).toHaveBeenCalledWith({
         ...blockOnChain,
         hash: 'parent',
         parentHash: 'parentHash',

@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { WebSocketProvider, ethers } from 'ethers';
 import { TransactionsDTO } from './dto/transactions.dto';
 import { Transaction } from './entities/transaction.entity';
+import { LockedTxs } from './entities/lockedTxs.entity';
 
 @Injectable()
 export class TransactionService {
@@ -19,6 +20,12 @@ export class TransactionService {
     );
   }
 
+  /**
+   * Fetches a transaction from the Ethereum network using its hash.
+   * @param {string} transactionHash - The hash of the transaction to fetch.
+   * @param {number} retry - The number of times to retry if an error occurs. Start to 0.
+   * @returns {Promise<any>} - A Promise that resolves to the transaction object, or undefined if it could not be fetched.
+   */
   async getTransaction(transactionHash: string, retry = 0) {
     try {
       const transactionOnChain = await this.provider.getTransaction(
@@ -31,7 +38,29 @@ export class TransactionService {
     }
   }
 
+  /**
+   * Processes an array of transaction hashes for a specific block hash.
+   * @param {TransactionsDTO} dto - A DTO containing the block hash and array of transaction hashes.
+   * @returns {Promise<void>} - A Promise that resolves when all transactions have been processed.
+   */
   async transactions({ blockHash, transactionHashes }: TransactionsDTO) {
+    //Check if data isn't already processed by another instance
+    if (
+      !!(await this.em.findOne(LockedTxs, {
+        hash: blockHash,
+      }))
+    )
+      return;
+
+    //Lock block hash ref for txs in process
+    try {
+      const lock = new LockedTxs({ hash: blockHash });
+      await this.em.persistAndFlush(lock);
+    } catch {
+      console.log('Lock undetected but already on process');
+      return;
+    }
+
     for (const transactionHash of transactionHashes) {
       const transactionOnChain = await this.getTransaction(transactionHash);
       const transaction = new Transaction({

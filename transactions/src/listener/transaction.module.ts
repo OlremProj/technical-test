@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { TransactionService } from './transaction.service';
-import { Transaction } from './entities/transaction.entity';
 import { TransactionController } from './transaction.controller';
+import { Transaction } from './entities/transaction.entity';
+import { LockedTxs } from './entities/lockedTxs.entity';
 
 @Module({
-  imports: [MikroOrmModule.forFeature({ entities: [Transaction] })],
+  imports: [MikroOrmModule.forFeature({ entities: [Transaction, LockedTxs] })],
   controllers: [TransactionController],
   exports: [TransactionService],
   providers: [TransactionService],

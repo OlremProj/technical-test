@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { ListenerService } from './listener.service';
-import { Block } from 'src/listener/block.entity';
-import { ClientsModule, Transport } from '@nestjs/microservices';
-import { BlockRepository } from './block.repository';
-import { ConfigModule, ConfigService } from '@nestjs/config';
+import { Block } from 'src/listener/entities/block.entity';
+import { LockedBlock } from 'src/listener/entities/lockedBlock.entity';
 
 @Module({
   imports: [
-    MikroOrmModule.forFeature({ entities: [Block] }),
+    MikroOrmModule.forFeature({ entities: [Block, LockedBlock] }),
     ClientsModule.registerAsync([
       {
         name: 'TRANSACTIONS_COMPUTATION',
@@ -27,6 +27,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
     ]),
   ],
   exports: [ListenerService],
-  providers: [ListenerService, BlockRepository],
+  providers: [ListenerService],
 })
 export class ListenerModule {}

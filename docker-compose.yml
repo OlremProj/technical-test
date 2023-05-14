@@ -10,6 +10,7 @@ services:
       - /home/app/node_modules
     depends_on:
       - db
+      - redis
     stdin_open: true # docker run -i
     tty: true # docker run -t
 
@@ -22,6 +23,7 @@ services:
       - /home/app/node_modules
     depends_on:
       - db
+      - redis
     stdin_open: true # docker run -i
     tty: true # docker run -t
 
