@@ -153,6 +153,3 @@ docker-compose up
 ```
 
 And you will see database populate with blocks and transactions information.
-
-By default, the service will listen for new blocks indefinitely. You can stop the service with `Ctrl + C`.
-or
