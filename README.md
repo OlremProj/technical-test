@@ -107,10 +107,10 @@ When I catch twice a block number I check in database if my block in db have the
 
 ### Amelioration
 
-- With monorepo solution like NX or turbo to create lib with duplicate code
+- With monorepo solution like NX or turbo to create lib to avoid duplicate code
 - Use stronger solution than redis with kafka or rabbitMQ and set up ttl manament with strong cache on transactions messaging to be sure to don't loose anything
 - set up lock topic in broker
-- Add repository layer to handle query
+- Add strong repository layer to handle query,transaction rollback and for the future create strong query to provide analytics system
 - Add e2e testing to be sure of the behavior, and to protect against library savage upgrade or dirty code upgrade
 - Use personal node to aviod third party cost like alchemy
 
