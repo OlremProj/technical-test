@@ -4,7 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { WebSocketProvider, ethers } from 'ethers';
 import { TransactionsDTO } from './dto/transactions.dto';
 import { Transaction } from './entities/transaction.entity';
-import { LockedTxs } from './entities/lockedTxs.entity';
+import { LockedTxs } from './entities/lockedTransactions.entity';
+import { TransactionError } from './entities/transactionError.entity';
 
 @Injectable()
 export class TransactionService {
@@ -85,12 +86,15 @@ export class TransactionService {
         await this.em.persistAndFlush(transaction);
       } catch (error) {
         /**
-         * Need to be replace by real logger system like winston
-         * I make the choice to log instead of throw because at this place
-         * we need to set up a behavior to handle every error append to don't loose information
+         * I make the choice to store the transaction error to put in place a mecanism to handle all the error correctly
          */
+        const transactionError = new TransactionError({
+          hash: transaction.hash,
+          cause: error.toString(),
+        });
+        this.em.persistAndFlush(transactionError);
 
-        console.error(
+        this.logger.error(
           `error append : ${error}, on transaction : ${transaction.hash}`,
         );
       }

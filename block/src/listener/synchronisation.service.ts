@@ -4,7 +4,10 @@ import { ConfigService } from '@nestjs/config';
 import { AlchemyProvider, ethers } from 'ethers';
 import { Block } from './entities/block.entity';
 import { ClientProxy } from '@nestjs/microservices';
-import { LockedBlock } from './entities/lockedBlock.entity';
+import {
+  aquiringLockSynchro,
+  releasingLockSynchro,
+} from 'src/helpers/lock.helpers';
 
 @Injectable()
 export class SynchronisationService {
@@ -30,6 +33,8 @@ export class SynchronisationService {
   }
 
   async dbSynchronisation() {
+    if (!(await aquiringLockSynchro(this.em))) return;
+
     this.logger.log(
       'DB Synchonisation to get missing block after service restart',
     );
@@ -73,23 +78,6 @@ export class SynchronisationService {
         //Get block data
         const blockOnChain = await this.provider.getBlock(latestDbBlockNumber);
 
-        //Check if data isn't already processed by another instance
-        if (
-          !!(await this.em.findOne(LockedBlock, {
-            hash: blockOnChain.hash,
-          }))
-        )
-          return;
-
-        //Lock block in process
-        try {
-          const lock = new LockedBlock({ hash: blockOnChain.hash });
-          await this.em.persistAndFlush(lock);
-        } catch {
-          this.logger.log('Lock undetected but block already on process');
-          return;
-        }
-
         //New block creation and mapping
         const block = new Block({
           ...blockOnChain,
@@ -113,6 +101,9 @@ export class SynchronisationService {
         this.logger.log(error);
       }
     }
+
+    await releasingLockSynchro(this.em);
+
     return latestDbBlockNumber;
   }
 }

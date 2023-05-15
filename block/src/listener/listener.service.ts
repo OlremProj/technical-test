@@ -6,6 +6,7 @@ import { Block } from './entities/block.entity';
 import { ClientProxy } from '@nestjs/microservices';
 import { LockedBlock } from './entities/lockedBlock.entity';
 import { Observable } from 'rxjs';
+import { aquiringLock } from 'src/helpers/lock.helpers';
 
 @Injectable()
 export class ListenerService {
@@ -45,8 +46,7 @@ export class ListenerService {
   }): Promise<void> {
     const block = await this.em.findOne(Block, { number: blockNumber });
 
-    //boolean isForked
-    await this.em.upsert(Block, { ...block, flag: 'FORKED' });
+    await this.em.upsert(Block, { ...block, isForked: true });
 
     if (
       (
@@ -95,29 +95,12 @@ export class ListenerService {
     //Get block data
     const blockOnChain = await this.provider.getBlock(blockNumber);
 
-    //Check if data isn't already processed by another instance
-    if (
-      !!(await em.findOne(LockedBlock, {
-        hash: blockOnChain.hash,
-      }))
-    )
-      return;
-
-    //Lock block in process
-    try {
-      const lock = new LockedBlock({ hash: blockOnChain.hash });
-      await em.persistAndFlush(lock);
-    } catch {
-      this.logger.log('Lock undetected but block already on process');
-      return;
-    }
+    if (!(await aquiringLock(em, blockOnChain.hash))) return;
 
     const storedBlock = await em.findOne(Block, {
       number: blockNumber,
     });
-    console.log('=====================storedBlock');
-    console.log(storedBlock);
-    console.log('=====================storedBlock');
+
     //Escape work if block already saved
     if (storedBlock) {
       if (storedBlock.hash == blockOnChain.hash) return;
