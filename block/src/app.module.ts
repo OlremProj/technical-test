@@ -3,6 +3,9 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { MikroORM } from '@mikro-orm/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ListenerModule } from './listener/listener.module';
+import { AppService } from './app.service';
+import { ApiController } from './api/api.controller';
+import { ApiModule } from './api/api.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -26,8 +29,10 @@ import { ListenerModule } from './listener/listener.module';
       inject: [ConfigService],
     }),
     ListenerModule,
+    AppModule,
+    ApiModule,
   ],
-  providers: [],
+  providers: [AppService],
 })
 export class AppModule implements OnModuleInit {
   constructor(private readonly orm: MikroORM) {}

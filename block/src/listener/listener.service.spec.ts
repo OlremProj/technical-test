@@ -105,19 +105,13 @@ describe('ListenerService', () => {
 
       const mockProvider = new MockProvider();
       service.provider = mockProvider as any;
-      em.findOne = jest
-        .fn()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValue({
-          ...blockOnChain,
-          hash: 'parent',
-          parentHash: 'parentHash',
-        });
-      em.findOne = jest.fn().mockResolvedValueOnce({
+
+      em.findOne = jest.fn().mockReturnValue({
         ...blockOnChain,
         hash: 'oldHash',
         parentHash: 'parentHash',
       });
+
       em.persistAndFlush = jest.fn().mockResolvedValueOnce(null);
       em.upsert = jest.fn();
       client.emit = jest.fn();

@@ -5,6 +5,7 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { ListenerService } from './listener.service';
 import { Block } from 'src/listener/entities/block.entity';
 import { LockedBlock } from 'src/listener/entities/lockedBlock.entity';
+import { SynchronisationService } from './synchronisation.service';
 
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { LockedBlock } from 'src/listener/entities/lockedBlock.entity';
       },
     ]),
   ],
-  exports: [ListenerService],
-  providers: [ListenerService],
+  exports: [ListenerService, SynchronisationService],
+  providers: [ListenerService, SynchronisationService],
 })
 export class ListenerModule {}

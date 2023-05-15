@@ -13,6 +13,9 @@ services:
       - redis
     stdin_open: true # docker run -i
     tty: true # docker run -t
+    restart: "on-failure:10"
+    ports:
+      - 3000:3000
 
   listner-transactions:
     build:
@@ -26,6 +29,7 @@ services:
       - redis
     stdin_open: true # docker run -i
     tty: true # docker run -t
+    restart: "on-failure:10"
 
   db:
     image: postgres

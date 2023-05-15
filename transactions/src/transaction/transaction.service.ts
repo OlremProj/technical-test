@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import { ConfigService } from '@nestjs/config';
 import { WebSocketProvider, ethers } from 'ethers';
@@ -8,6 +8,7 @@ import { LockedTxs } from './entities/lockedTxs.entity';
 
 @Injectable()
 export class TransactionService {
+  private readonly logger = new Logger(TransactionService.name);
   private readonly provider: WebSocketProvider;
 
   constructor(
@@ -26,7 +27,7 @@ export class TransactionService {
    * @param {number} retry - The number of times to retry if an error occurs. Start to 0.
    * @returns {Promise<any>} - A Promise that resolves to the transaction object, or undefined if it could not be fetched.
    */
-  async getTransaction(transactionHash: string, retry = 0) {
+  async getTransaction(transactionHash: string, retry = 0): Promise<any> {
     try {
       const transactionOnChain = await this.provider.getTransaction(
         transactionHash,
@@ -43,7 +44,10 @@ export class TransactionService {
    * @param {TransactionsDTO} dto - A DTO containing the block hash and array of transaction hashes.
    * @returns {Promise<void>} - A Promise that resolves when all transactions have been processed.
    */
-  async transactions({ blockHash, transactionHashes }: TransactionsDTO) {
+  async transactions({
+    blockHash,
+    transactionHashes,
+  }: TransactionsDTO): Promise<void> {
     //Check if data isn't already processed by another instance
     if (
       !!(await this.em.findOne(LockedTxs, {
@@ -57,7 +61,7 @@ export class TransactionService {
       const lock = new LockedTxs({ hash: blockHash });
       await this.em.persistAndFlush(lock);
     } catch {
-      console.log('Lock undetected but already on process');
+      this.logger.log('Lock undetected but already on process');
       return;
     }
 

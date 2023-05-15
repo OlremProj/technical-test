@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TransactionModule } from './listener/transaction.module';
+import { TransactionModule } from './transaction/transaction.module';
 @Module({
   imports: [
     ConfigModule.forRoot({

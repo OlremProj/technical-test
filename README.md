@@ -27,6 +27,7 @@ The following environment variables must be set before running the Listener Serv
 - `POSTGRES_PORT`: The port for the PostgreSQL server
 - `REDIS_ENDPOINT`: The endpoint for the Redis server
 - `REDIS_PORT`: The port for the Redis server
+- `API_PORT`: The port for api
 
 Example values:
 
@@ -40,6 +41,7 @@ export POSTGRES_ENDPOINT=db
 export POSTGRES_PORT=5432
 export REDIS_ENDPOINT=my_redis
 export REDIS_PORT=6379
+export API_PORT=3000
 ```
 
 ## Running the Service

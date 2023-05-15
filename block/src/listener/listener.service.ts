@@ -1,13 +1,15 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
 import { ConfigService } from '@nestjs/config';
 import { WebSocketProvider, ethers } from 'ethers';
 import { Block } from './entities/block.entity';
 import { ClientProxy } from '@nestjs/microservices';
 import { LockedBlock } from './entities/lockedBlock.entity';
+import { Observable } from 'rxjs';
 
 @Injectable()
 export class ListenerService {
+  private readonly logger = new Logger(ListenerService.name);
   provider: WebSocketProvider;
   /**
    * ListenerService constructor.
@@ -26,7 +28,6 @@ export class ListenerService {
       this.configService.get<string>('ALCHEMY_BASE_WS') +
         this.configService.get<string>('ALCHEMY_API_KEY'),
     );
-    this.dbSynchronisation();
   }
 
   /**
@@ -41,8 +42,10 @@ export class ListenerService {
   }: {
     parentHash: string;
     blockNumber: number;
-  }) {
+  }): Promise<void> {
     const block = await this.em.findOne(Block, { number: blockNumber });
+
+    //boolean isForked
     await this.em.upsert(Block, { ...block, flag: 'FORKED' });
 
     if (
@@ -64,14 +67,14 @@ export class ListenerService {
   /**
    * Listens for new blocks and processes them when received.
    */
-  async listen() {
+  async listen(): Promise<void> {
     try {
       this.provider.on('block', async (blockNumber) => {
-        console.log('Realtime listen : ', blockNumber);
+        this.logger.log('Realtime listen : ', blockNumber);
         await this.onNewBlock(blockNumber, this.em, this.client);
       });
     } catch (error) {
-      console.error(`Failed to listen for new blocks: ${error.message}`);
+      this.logger.error(`Failed to listen for new blocks: ${error.message}`);
     }
   }
 
@@ -84,7 +87,11 @@ export class ListenerService {
    * @param em - the entity manager to use for database operations.
    * @param client - the client proxy to use for emitting transaction hashes.
    */
-  async onNewBlock(blockNumber: number, em = this.em, client = this.client) {
+  async onNewBlock(
+    blockNumber: number,
+    em = this.em,
+    client = this.client,
+  ): Promise<void | Observable<any>> {
     //Get block data
     const blockOnChain = await this.provider.getBlock(blockNumber);
 
@@ -101,14 +108,16 @@ export class ListenerService {
       const lock = new LockedBlock({ hash: blockOnChain.hash });
       await em.persistAndFlush(lock);
     } catch {
-      console.log('Lock undetected but block already on process');
+      this.logger.log('Lock undetected but block already on process');
       return;
     }
 
     const storedBlock = await em.findOne(Block, {
       number: blockNumber,
     });
-
+    console.log('=====================storedBlock');
+    console.log(storedBlock);
+    console.log('=====================storedBlock');
     //Escape work if block already saved
     if (storedBlock) {
       if (storedBlock.hash == blockOnChain.hash) return;
@@ -135,46 +144,6 @@ export class ListenerService {
         },
       );
 
-    return;
-  }
-
-  async dbSynchronisation() {
-    console.log('DB Synchonisation to get missing block after service restart');
-    const latestStoredBlock: Block[] = await this.em.find(
-      Block,
-      {},
-      {
-        orderBy: { number: -1 },
-        limit: 1,
-      },
-    );
-
-    //If it's the first launch of the application we don't launch sync on the blockchain from the blocknumber 0
-    if (!latestStoredBlock || latestStoredBlock.length === 0) {
-      console.log('First start nothing to recover');
-      return;
-    }
-
-    let { number: latestDbBlockNumber } = latestStoredBlock[0];
-
-    const latestBcBlockNumber: number = (await this.provider.getBlock('latest'))
-      .number;
-
-    if (latestDbBlockNumber === latestBcBlockNumber) {
-      console.log('Already synchronised');
-      return;
-    }
-    console.log(
-      `Recovering of ${
-        latestBcBlockNumber - latestDbBlockNumber
-      } missing block`,
-    );
-
-    while (latestDbBlockNumber < latestBcBlockNumber) {
-      console.log('Recovery of : ', latestDbBlockNumber++);
-      await this.onNewBlock(latestDbBlockNumber);
-    }
-    console.log('Db synchronised : ', latestBcBlockNumber);
     return;
   }
 }
