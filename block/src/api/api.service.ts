@@ -1,12 +1,34 @@
 import { Injectable } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/core';
-import { Block } from 'src/listener/entities/block.entity';
+import { Block } from '@/listener/entities/block.entity';
+import { EntityRepository } from '@mikro-orm/postgresql';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { Transaction } from '@/listener/entities/transaction.entity';
+import { TransactionError } from '@/listener/entities/transactionError.entity';
 
 @Injectable()
 export class ApiService {
-  constructor(private readonly em: EntityManager) {}
+  constructor(
+    @InjectRepository(TransactionError)
+    private readonly transactionErrorRepository: EntityRepository<TransactionError>,
+    @InjectRepository(Transaction)
+    private readonly transactionRepository: EntityRepository<Transaction>,
+    @InjectRepository(Block)
+    private readonly blockRepository: EntityRepository<Block>,
+  ) {}
 
-  async getTransaction(): Promise<Block[]> {
-    return await this.em.find(Block, { isForked: true });
+  async getForkedBlocks(): Promise<Block[]> {
+    return await this.blockRepository.find({ isForked: true });
+  }
+
+  async getBlockCount(): Promise<number> {
+    return await this.blockRepository.count();
+  }
+
+  async getTransactionCount(): Promise<number> {
+    return await this.transactionRepository.count();
+  }
+
+  async getTransactionsError(): Promise<TransactionError[]> {
+    return await this.transactionErrorRepository.find({});
   }
 }

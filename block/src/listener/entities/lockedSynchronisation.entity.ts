@@ -5,7 +5,7 @@ export class LockedSynchronisationBlock {
   @PrimaryKey()
   id!: number;
 
-  @Property({ type: 'boolean', unique: true })
+  @Property({ type: 'boolean' })
   isRunning: boolean;
 
   constructor({ isRunning }) {

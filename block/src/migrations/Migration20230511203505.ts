@@ -23,7 +23,7 @@ export class Migration20230511203505 extends Migration {
     );
 
     this.addSql(
-      'create table "locked_synchronisation_block" ("id" serial primary key, "is_running" boolean not null unique);',
+      'create table "locked_synchronisation_block" ("id" serial primary key, "is_running" boolean not null);',
     );
   }
 

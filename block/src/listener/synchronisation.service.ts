@@ -15,11 +15,12 @@ import { InjectRepository } from '@mikro-orm/nestjs';
 export class SynchronisationService {
   private readonly logger = new Logger(SynchronisationService.name);
   provider: AlchemyProvider;
+
   /**
    * ListenerService constructor.
    *
    * @param configService - Configuration service.
-   * @param em - Entity manager.
+   * @param lockRepository - Lock repository.
    * @param blockRepository - Block repository.
    * @param client - Microservice client.
    */
@@ -37,8 +38,16 @@ export class SynchronisationService {
     );
   }
 
+  /**
+   * This function synchronizes the local database with the latest blocks on the blockchain.
+   * It retrieves the latest block number stored in the database, and compares it to the latest block number on the blockchain.
+   * If there are missing blocks between the latest block number in the database and the latest block number on the blockchain,
+   * it retrieves them from the blockchain, saves them in the database, and sends their transaction hashes to a dedicated worker.
+   * This function also acquires and releases a lock in order to prevent multiple instances of this function from running at the same time.
+   * @returns {Promise<number>} The latest block number stored in the database after synchronization is complete.
+   */
   async dbSynchronisation() {
-    if (!(await aquiringLockSynchro(this.lockRepository))) return;
+    if (!(await aquiringLockSynchro(this.lockRepository, this.logger))) return;
 
     this.logger.log(
       'DB Synchonisation to get missing block after service restart',
@@ -54,6 +63,7 @@ export class SynchronisationService {
     //If it's the first launch of the application we don't launch sync on the blockchain from the blocknumber 0
     if (!latestStoredBlock || latestStoredBlock.length === 0) {
       this.logger.log('First start nothing to recover');
+      await releasingLockSynchro(this.lockRepository);
       return;
     }
 
@@ -62,8 +72,9 @@ export class SynchronisationService {
     const latestBcBlockNumber: number = (await this.provider.getBlock('latest'))
       .number;
 
-    if (latestDbBlockNumber === latestBcBlockNumber) {
+    if (latestBcBlockNumber - latestDbBlockNumber <= 1) {
       this.logger.log('Already synchronised');
+      await releasingLockSynchro(this.lockRepository);
       return;
     }
     this.logger.log(
@@ -92,7 +103,7 @@ export class SynchronisationService {
         await this.blockRepository.upsert(block);
 
         // Send transactions hashes to dedicated worker
-        if (blockOnChain.transactions)
+        if (blockOnChain.transactions) {
           this.client.emit(
             { cmd: 'transactions' },
             {
@@ -101,6 +112,7 @@ export class SynchronisationService {
               transactionHashes: blockOnChain.transactions,
             },
           );
+        }
       } catch (error) {
         this.logger.log(error);
       }

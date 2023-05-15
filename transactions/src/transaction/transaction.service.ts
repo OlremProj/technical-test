@@ -95,13 +95,13 @@ export class TransactionService {
          * I make the choice to store the transaction error to put in place a mecanism to handle all the error correctly
          */
         const transactionError = new TransactionError({
-          hash: transaction.hash,
+          hash: transactionHash,
           cause: error.toString(),
         });
         this.transactionErrorRepository.upsert(transactionError);
 
         this.logger.error(
-          `error append : ${error}, on transaction : ${transaction.hash}`,
+          `error append : ${error}, on transaction : ${transactionHash}`,
         );
       }
     }

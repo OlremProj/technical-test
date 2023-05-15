@@ -13,7 +13,11 @@ The block listener process each block from the blockchain, and send to redis an 
 
 ### API
 
-I set up a little endpoint to get all the forked block at `localhost:3000/block/forked` and swagger at `localhost:3000/documentation`
+- `localhost:3000/documentation`
+- `localhost:3000/block/forked` List of focked block
+- `localhost:3000/block/count` Count of regestred block
+- `localhost:3000/block/transaction/count` Count of regestred transaction
+- `localhost:3000/block/transaction/count` List of transaction error
 
 ### Lock
 
@@ -106,6 +110,8 @@ When I catch twice a block number I check in database if my block in db have the
 ```
 
 ### Amelioration
+
+With more time in real project condition :
 
 - With monorepo solution like NX or turbo to create lib to avoid duplicate code
 - Use stronger solution than redis with kafka or rabbitMQ and set up ttl manament with strong cache on transactions messaging to be sure to don't loose anything

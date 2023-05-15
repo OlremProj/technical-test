@@ -12,13 +12,14 @@ import { LockedBlock } from './entities/lockedBlock.entity';
 @Injectable()
 export class ListenerService {
   private readonly logger = new Logger(ListenerService.name);
-  provider: WebSocketProvider;
+  private readonly provider: WebSocketProvider;
+
   /**
    * ListenerService constructor.
    *
    * @param configService - Configuration service.
-   * @param em - Entity manager.
    * @param blockRepository - Block repository.
+   * @param lockBlockRepository - Locked block repository.
    * @param client - Microservice client.
    */
   constructor(
@@ -38,8 +39,8 @@ export class ListenerService {
   /**
    * Flags a forked block and its previous blocks in the database.
    *
-   * @param parentHash - the parent hash of the forked block.
-   * @param blockNumber - the block number of the forked block.
+   * @param parentHash - The parent hash of the forked block.
+   * @param blockNumber - The block number of the forked block.
    */
   async flagForkBlock({
     parentHash,
@@ -69,7 +70,8 @@ export class ListenerService {
   }
 
   /**
-   * Listens for new blocks and processes them when received.
+   * Listens for new blocks in real-time and processes them using the `onNewBlock()` method.
+   * @returns {Promise<void>}
    */
   async listen(): Promise<void> {
     try {
@@ -90,11 +92,10 @@ export class ListenerService {
   /**
    * Processes a new block by saving it in the database and emitting its transaction hashes to a worker.
    *
-   * @param number - the block number of the new block.
-   * @param parentHash - the parent hash of the new block.
-   * @param hash - the hash of the new block.
-   * @param em - the entity manager to use for database operations.
-   * @param client - the client proxy to use for emitting transaction hashes.
+   * @param blockNumber - The block number of the new block.
+   * @param blockRepository - The block repository to use for database operations.
+   * @param lockBlockRepository - The locked block repository to use for database operations.
+   * @param client - The client proxy to use for emitting transaction hashes.
    */
   async onNewBlock(
     blockNumber: number,
@@ -105,7 +106,13 @@ export class ListenerService {
     //Get block data
     const blockOnChain = await this.provider.getBlock(blockNumber);
 
-    if (!(await aquiringLockBlock(lockBlockRepository, blockOnChain.hash)))
+    if (
+      !(await aquiringLockBlock(
+        lockBlockRepository,
+        blockOnChain.hash,
+        this.logger,
+      ))
+    )
       return;
 
     const storedBlock = await blockRepository.findOne({
@@ -125,7 +132,7 @@ export class ListenerService {
     });
 
     // Save in database
-    await blockRepository.persistAndFlush(block);
+    await blockRepository.upsert(block);
 
     // Send transactions hashes to dedicated worker
     if (blockOnChain.transactions)
