@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/postgresql';
+import { EntityRepository } from '@mikro-orm/postgresql';
 import { ConfigService } from '@nestjs/config';
 import { AlchemyProvider, ethers } from 'ethers';
 import { Block } from './entities/block.entity';
@@ -8,6 +8,8 @@ import {
   aquiringLockSynchro,
   releasingLockSynchro,
 } from 'src/helpers/lock.helpers';
+import { LockedSynchronisationBlock } from './entities/lockedSynchronisation.entity';
+import { InjectRepository } from '@mikro-orm/nestjs';
 
 @Injectable()
 export class SynchronisationService {
@@ -23,7 +25,10 @@ export class SynchronisationService {
    */
   constructor(
     private readonly configService: ConfigService,
-    private readonly em: EntityManager,
+    @InjectRepository(Block)
+    private readonly blockRepository: EntityRepository<Block>,
+    @InjectRepository(LockedSynchronisationBlock)
+    private readonly lockRepository: EntityRepository<LockedSynchronisationBlock>,
     @Inject('TRANSACTIONS_COMPUTATION') private client: ClientProxy,
   ) {
     this.provider = new ethers.AlchemyProvider(
@@ -33,13 +38,12 @@ export class SynchronisationService {
   }
 
   async dbSynchronisation() {
-    if (!(await aquiringLockSynchro(this.em))) return;
+    if (!(await aquiringLockSynchro(this.lockRepository))) return;
 
     this.logger.log(
       'DB Synchonisation to get missing block after service restart',
     );
-    const latestStoredBlock: Block[] = await this.em.find(
-      Block,
+    const latestStoredBlock: Block[] = await this.blockRepository.find(
       {},
       {
         orderBy: { number: -1 },
@@ -85,7 +89,7 @@ export class SynchronisationService {
         });
 
         // Save in database
-        await this.em.persistAndFlush(block);
+        await this.blockRepository.upsert(block);
 
         // Send transactions hashes to dedicated worker
         if (blockOnChain.transactions)
@@ -102,7 +106,7 @@ export class SynchronisationService {
       }
     }
 
-    await releasingLockSynchro(this.em);
+    await releasingLockSynchro(this.lockRepository);
 
     return latestDbBlockNumber;
   }

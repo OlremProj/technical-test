@@ -2,8 +2,10 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { ListenerService } from './listener.service';
 import { ClientProxy } from '@nestjs/microservices';
-import { EntityManager, EntityRepository } from '@mikro-orm/postgresql';
+import { EntityManager } from '@mikro-orm/postgresql';
 import { Block } from './entities/block.entity';
+import { getRepositoryToken } from '@mikro-orm/nestjs';
+import { LockedBlock } from './entities/lockedBlock.entity';
 
 const blockOnChain = {
   number: 123,
@@ -18,10 +20,30 @@ class MockProvider {
     return blockOnChain;
   }
 }
+class MockEntityManager {
+  async findOne(...args: any) {
+    // return a mock block object
+    return {
+      ...blockOnChain,
+      hash: 'oldHash',
+      parentHash: 'parentHash',
+    };
+  }
+  async persistAndFlush(...args: any) {
+    // return a mock block object
+    return null;
+  }
+  async upsert(...args: any) {
+    // return a mock block object
+    return null;
+  }
+}
 describe('ListenerService', () => {
   let service: ListenerService;
   let configService: ConfigService;
-  let em: EntityManager;
+
+  let blockRepositoryMock: any;
+  let lockedRepositoryMock: any;
   let client: ClientProxy;
 
   beforeEach(async () => {
@@ -29,17 +51,20 @@ describe('ListenerService', () => {
       providers: [
         ListenerService,
         {
-          provide: EntityManager,
-          useValue: { persistAndFlush: jest.fn() },
-        },
-        {
-          provide: EntityRepository,
+          provide: getRepositoryToken(Block),
           useValue: {
-            findOne: jest.fn(),
             persistAndFlush: jest.fn(),
-            upsert: jest.fn(),
+            findOne: jest.fn(),
           },
         },
+        {
+          provide: getRepositoryToken(LockedBlock),
+          useValue: {
+            persistAndFlush: jest.fn(),
+            findOne: jest.fn(),
+          },
+        },
+
         {
           provide: ClientProxy,
           useValue: {},
@@ -57,15 +82,21 @@ describe('ListenerService', () => {
       ],
     }).compile();
 
+    jest.mock('../helpers/lock.helpers', () => {
+      return { aquiringLockBlock: jest.fn().mockResolvedValue(true) };
+    });
+
     service = module.get<ListenerService>(ListenerService);
-    em = module.get<EntityManager>(EntityManager);
+    blockRepositoryMock = module.get(getRepositoryToken(Block));
+    lockedRepositoryMock = module.get(getRepositoryToken(LockedBlock));
+
     client = module.get<ClientProxy>(ClientProxy);
     configService = module.get(ConfigService);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+  // afterEach(() => {
+  //   jest.clearAllMocks();
+  // });
 
   describe('onNewBLock', () => {
     it('should save the block in the database and emit transaction hashes to the worker', async () => {
@@ -75,57 +106,20 @@ describe('ListenerService', () => {
 
       const mockProvider = new MockProvider();
       service.provider = mockProvider as any;
-
-      em.findOne = jest.fn().mockResolvedValueOnce(null);
-      em.persistAndFlush = jest.fn().mockResolvedValueOnce(null);
+      blockRepositoryMock.findOne = jest.fn().mockResolvedValueOnce(null);
+      blockRepositoryMock.persistAndFlush = jest
+        .fn()
+        .mockResolvedValueOnce(null);
       client.emit = jest.fn();
 
-      await service.onNewBlock(blockNumber, em, client);
-
-      expect(em.persistAndFlush).toHaveBeenCalledWith(
-        new Block({
-          ...blockOnChain,
-          baseFeePerGas: 123,
-        } as unknown as Block),
+      await service.onNewBlock(
+        blockNumber,
+        blockRepositoryMock,
+        lockedRepositoryMock,
+        client,
       );
 
-      expect(client.emit).toHaveBeenCalledWith(
-        { cmd: 'transactions' },
-        {
-          blockHash: blockOnChain.hash,
-          blockNumber: blockOnChain.number,
-          transactionHashes: blockOnChain.transactions,
-        },
-      );
-    });
-    it('should flag fock block in the database and emit transaction hashes to the worker', async () => {
-      const blockNumber = 123;
-
-      jest.spyOn(configService, 'get').mockReturnValueOnce('url');
-
-      const mockProvider = new MockProvider();
-      service.provider = mockProvider as any;
-
-      em.findOne = jest.fn().mockReturnValue({
-        ...blockOnChain,
-        hash: 'oldHash',
-        parentHash: 'parentHash',
-      });
-
-      em.persistAndFlush = jest.fn().mockResolvedValueOnce(null);
-      em.upsert = jest.fn();
-      client.emit = jest.fn();
-
-      await service.onNewBlock(blockNumber, em, client);
-
-      expect(em.upsert).toHaveBeenCalledWith({
-        ...blockOnChain,
-        hash: 'parent',
-        parentHash: 'parentHash',
-        flag: 'FORKED',
-      });
-
-      expect(em.persistAndFlush).toHaveBeenCalledWith(
+      expect(blockRepositoryMock.persistAndFlush).toHaveBeenCalledWith(
         new Block({
           ...blockOnChain,
           baseFeePerGas: 123,
@@ -150,15 +144,73 @@ describe('ListenerService', () => {
       const mockProvider = new MockProvider();
       service.provider = mockProvider as any;
 
-      em.findOne = jest.fn().mockResolvedValueOnce(blockOnChain);
-      em.persistAndFlush = jest.fn().mockResolvedValueOnce(null);
+      blockRepositoryMock.findOne = jest
+        .fn()
+        .mockResolvedValueOnce(blockOnChain);
+      blockRepositoryMock.persistAndFlush = jest
+        .fn()
+        .mockResolvedValueOnce(null);
       client.emit = jest.fn();
 
-      await service.onNewBlock(blockNumber, em, client);
+      await service.onNewBlock(
+        blockNumber,
+        blockRepositoryMock,
+        lockedRepositoryMock,
+        client,
+      );
 
-      expect(em.persistAndFlush).not.toHaveBeenCalled();
+      expect(blockRepositoryMock.persistAndFlush).not.toHaveBeenCalled();
 
       expect(client.emit).not.toHaveBeenCalled();
+    });
+  });
+  describe('onNewBLock with forked block', () => {
+    it('should flag fock block in the database and emit transaction hashes to the worker', async () => {
+      const blockNumber = 123;
+      jest.spyOn(configService, 'get').mockReturnValueOnce('url');
+      (blockRepositoryMock.findOne as jest.Mock).mockResolvedValue({
+        ...blockOnChain,
+        hash: 'parent',
+        parentHash: 'parentHash',
+      });
+
+      blockRepositoryMock.persistAndFlush = jest
+        .fn()
+        .mockResolvedValueOnce(null);
+      blockRepositoryMock.upsert = jest.fn();
+      client.emit = jest.fn();
+      const mockProvider = new MockProvider();
+      service.provider = mockProvider as any;
+
+      await service.onNewBlock(
+        blockNumber,
+        blockRepositoryMock,
+        lockedRepositoryMock,
+        client,
+      );
+
+      expect(blockRepositoryMock.upsert).toHaveBeenCalledWith({
+        ...blockOnChain,
+        hash: 'parent',
+        parentHash: 'parentHash',
+        isForked: true,
+      });
+
+      expect(blockRepositoryMock.persistAndFlush).toHaveBeenCalledWith(
+        new Block({
+          ...blockOnChain,
+          baseFeePerGas: 123,
+        } as unknown as Block),
+      );
+
+      expect(client.emit).toHaveBeenCalledWith(
+        { cmd: 'transactions' },
+        {
+          blockHash: blockOnChain.hash,
+          blockNumber: blockOnChain.number,
+          transactionHashes: blockOnChain.transactions,
+        },
+      );
     });
   });
 });

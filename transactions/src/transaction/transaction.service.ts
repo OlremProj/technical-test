@@ -1,11 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/core';
 import { ConfigService } from '@nestjs/config';
 import { WebSocketProvider, ethers } from 'ethers';
 import { TransactionsDTO } from './dto/transactions.dto';
 import { Transaction } from './entities/transaction.entity';
-import { LockedTxs } from './entities/lockedTransactions.entity';
+import { LockedTransactions } from './entities/lockedTransactions.entity';
 import { TransactionError } from './entities/transactionError.entity';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { EntityRepository } from '@mikro-orm/postgresql';
 
 @Injectable()
 export class TransactionService {
@@ -14,7 +15,12 @@ export class TransactionService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly em: EntityManager,
+    @InjectRepository(Transaction)
+    private readonly transactionRepository: EntityRepository<Transaction>,
+    @InjectRepository(TransactionError)
+    private readonly transactionErrorRepository: EntityRepository<TransactionError>,
+    @InjectRepository(LockedTransactions)
+    private readonly lockRepository: EntityRepository<LockedTransactions>,
   ) {
     this.provider = new ethers.WebSocketProvider(
       this.configService.get<string>('ALCHEMY_BASE_WS') +
@@ -51,7 +57,7 @@ export class TransactionService {
   }: TransactionsDTO): Promise<void> {
     //Check if data isn't already processed by another instance
     if (
-      !!(await this.em.findOne(LockedTxs, {
+      !!(await this.lockRepository.findOne({
         hash: blockHash,
       }))
     )
@@ -59,8 +65,8 @@ export class TransactionService {
 
     //Lock block hash ref for txs in process
     try {
-      const lock = new LockedTxs({ hash: blockHash });
-      await this.em.persistAndFlush(lock);
+      const lock = new LockedTransactions({ hash: blockHash });
+      await this.lockRepository.upsert(lock);
     } catch {
       this.logger.log('Lock undetected but already on process');
       return;
@@ -83,7 +89,7 @@ export class TransactionService {
       } as unknown as Transaction);
 
       try {
-        await this.em.persistAndFlush(transaction);
+        await this.transactionRepository.upsert(transaction);
       } catch (error) {
         /**
          * I make the choice to store the transaction error to put in place a mecanism to handle all the error correctly
@@ -92,7 +98,7 @@ export class TransactionService {
           hash: transaction.hash,
           cause: error.toString(),
         });
-        this.em.persistAndFlush(transactionError);
+        this.transactionErrorRepository.upsert(transactionError);
 
         this.logger.error(
           `error append : ${error}, on transaction : ${transaction.hash}`,

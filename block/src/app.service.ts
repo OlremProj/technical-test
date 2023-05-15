@@ -16,7 +16,7 @@ export class AppService {
     worker.on('message', (message) =>
       this.logger.log('DB synchronised : ', message),
     );
-    worker.on('error', (e) => this.logger.log('on error', e));
+    worker.on('error', (e) => this.logger.error('on error', e));
     worker.on('exit', (code) => this.logger.log('on exit', code));
 
     return 'Processing the db synchronisation';

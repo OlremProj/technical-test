@@ -1,6 +1,32 @@
 version: "3.8"
 
 services:
+  db:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: yourusername
+      POSTGRES_PASSWORD: yourpassword
+      POSTGRES_DB: indexation
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yourusername -d indexation"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - redis
+
+  redis:
+    image: redis
+    container_name: my_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
   listner-block:
     build:
       context: ./block
@@ -9,8 +35,8 @@ services:
       - "./block:/home/app/"
       - /home/app/node_modules
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
     stdin_open: true # docker run -i
     tty: true # docker run -t
     restart: "on-failure:10"
@@ -25,27 +51,8 @@ services:
       - "./transactions:/home/app/"
       - /home/app/node_modules
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
     stdin_open: true # docker run -i
     tty: true # docker run -t
     restart: "on-failure:10"
-
-  db:
-    image: postgres
-    restart: always
-    environment:
-      POSTGRES_USER: yourusername
-      POSTGRES_PASSWORD: yourpassword
-      POSTGRES_DB: indexation
-    ports:
-      - "5432:5432"
-    volumes:
-      - ./data:/var/lib/postgresql/data
-
-  redis:
-    image: redis
-    container_name: my_redis
-    restart: always
-    ports:
-      - "6379:6379"

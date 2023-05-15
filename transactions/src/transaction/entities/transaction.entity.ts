@@ -14,7 +14,7 @@ export class Transaction {
   @Property({ type: 'bigint', nullable: true })
   transactionIndex: number | undefined;
 
-  @Property({ type: 'char', length: 66 })
+  @Property({ type: 'char', length: 66, unique: true })
   hash: string;
 
   @Property({ type: 'bigint' })

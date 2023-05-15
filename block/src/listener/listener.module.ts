@@ -6,10 +6,13 @@ import { ListenerService } from './listener.service';
 import { Block } from 'src/listener/entities/block.entity';
 import { LockedBlock } from 'src/listener/entities/lockedBlock.entity';
 import { SynchronisationService } from './synchronisation.service';
+import { LockedSynchronisationBlock } from './entities/lockedSynchronisation.entity';
 
 @Module({
   imports: [
-    MikroOrmModule.forFeature({ entities: [Block, LockedBlock] }),
+    MikroOrmModule.forFeature({
+      entities: [Block, LockedBlock, LockedSynchronisationBlock],
+    }),
     ClientsModule.registerAsync([
       {
         name: 'TRANSACTIONS_COMPUTATION',

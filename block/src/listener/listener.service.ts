@@ -1,12 +1,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/postgresql';
+import { EntityRepository } from '@mikro-orm/postgresql';
 import { ConfigService } from '@nestjs/config';
 import { WebSocketProvider, ethers } from 'ethers';
 import { Block } from './entities/block.entity';
 import { ClientProxy } from '@nestjs/microservices';
-import { LockedBlock } from './entities/lockedBlock.entity';
 import { Observable } from 'rxjs';
-import { aquiringLock } from 'src/helpers/lock.helpers';
+import { aquiringLockBlock } from '../helpers/lock.helpers';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { LockedBlock } from './entities/lockedBlock.entity';
 
 @Injectable()
 export class ListenerService {
@@ -22,7 +23,10 @@ export class ListenerService {
    */
   constructor(
     private readonly configService: ConfigService,
-    private readonly em: EntityManager,
+    @InjectRepository(Block)
+    private readonly blockRepository: EntityRepository<Block>,
+    @InjectRepository(LockedBlock)
+    private readonly lockBlockRepository: EntityRepository<LockedBlock>,
     @Inject('TRANSACTIONS_COMPUTATION') private client: ClientProxy,
   ) {
     this.provider = new ethers.WebSocketProvider(
@@ -44,13 +48,13 @@ export class ListenerService {
     parentHash: string;
     blockNumber: number;
   }): Promise<void> {
-    const block = await this.em.findOne(Block, { number: blockNumber });
+    const block = await this.blockRepository.findOne({ number: blockNumber });
 
-    await this.em.upsert(Block, { ...block, isForked: true });
+    await this.blockRepository.upsert({ ...block, isForked: true });
 
     if (
       (
-        await this.em.findOne(Block, {
+        await this.blockRepository.findOne({
           number: blockNumber - 1,
         })
       ).hash !== parentHash
@@ -71,7 +75,12 @@ export class ListenerService {
     try {
       this.provider.on('block', async (blockNumber) => {
         this.logger.log('Realtime listen : ', blockNumber);
-        await this.onNewBlock(blockNumber, this.em, this.client);
+        await this.onNewBlock(
+          blockNumber,
+          this.blockRepository,
+          this.lockBlockRepository,
+          this.client,
+        );
       });
     } catch (error) {
       this.logger.error(`Failed to listen for new blocks: ${error.message}`);
@@ -89,15 +98,17 @@ export class ListenerService {
    */
   async onNewBlock(
     blockNumber: number,
-    em = this.em,
+    blockRepository = this.blockRepository,
+    lockBlockRepository = this.lockBlockRepository,
     client = this.client,
   ): Promise<void | Observable<any>> {
     //Get block data
     const blockOnChain = await this.provider.getBlock(blockNumber);
 
-    if (!(await aquiringLock(em, blockOnChain.hash))) return;
+    if (!(await aquiringLockBlock(lockBlockRepository, blockOnChain.hash)))
+      return;
 
-    const storedBlock = await em.findOne(Block, {
+    const storedBlock = await blockRepository.findOne({
       number: blockNumber,
     });
 
@@ -114,7 +125,7 @@ export class ListenerService {
     });
 
     // Save in database
-    await em.persistAndFlush(block);
+    await blockRepository.persistAndFlush(block);
 
     // Send transactions hashes to dedicated worker
     if (blockOnChain.transactions)

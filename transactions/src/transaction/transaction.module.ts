@@ -3,13 +3,13 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { TransactionService } from './transaction.service';
 import { TransactionController } from './transaction.controller';
 import { Transaction } from './entities/transaction.entity';
-import { LockedTxs } from './entities/lockedTransactions.entity';
+import { LockedTransactions } from './entities/lockedTransactions.entity';
 import { TransactionError } from './entities/transactionError.entity';
 
 @Module({
   imports: [
     MikroOrmModule.forFeature({
-      entities: [Transaction, LockedTxs, TransactionError],
+      entities: [Transaction, LockedTransactions, TransactionError],
     }),
   ],
   controllers: [TransactionController],
